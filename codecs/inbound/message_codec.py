@@ -449,7 +449,7 @@ class QQInboundCodec(QQInboundCardMixin, QQInboundTextMixin):
             resolve_details: 是否查询引用目标的内容和发送者信息。
 
         Returns:
-            Optional[QQSegment]: 转换后的回复消息段；缺少有效消息 ID 或查询不到原消息时返回 ``None``。
+            Optional[QQSegment]: 有效引用保留目标 ID，原消息可用时附带预览。
         """
         target_message_id = self._normalize_inbound_reply_id(segment_data.get("id"))
         if not target_message_id:
@@ -457,8 +457,6 @@ class QQInboundCodec(QQInboundCardMixin, QQInboundTextMixin):
 
         reply_payload: Dict[str, Any] = {"target_message_id": target_message_id}
         message_detail = await self._query_service.get_message_detail(target_message_id) if resolve_details else None
-        if resolve_details and message_detail is None:
-            return None
         if message_detail is not None:
             sender = message_detail.get("sender", {})
             if not isinstance(sender, Mapping):
@@ -483,10 +481,26 @@ class QQInboundCodec(QQInboundCardMixin, QQInboundTextMixin):
         """
         try:
             message_payload = self._require_message_segments(message_detail)
-            group_id = str(message_detail.get("group_id") or "").strip()
-            # 引用目标可能再次引用自身或另一条消息；预览不继续查询目标详情。
+            # 引用预览只用 get_msg 已返回的元数据；下载原始媒体可能断开事件连接。
+            labels = {"record": "[语音]", "image": "[图片]", "video": "[视频]",
+                      "forward": "[合并转发]", "reply": "[引用]", "json": "[卡片]",
+                      "xml": "[卡片]", "share": "[分享]"}
+            preview = []
+            for segment in message_payload:
+                kind, data = segment["type"], segment["data"]
+                if kind in ("text", "markdown", "face"):
+                    preview.append(segment)
+                    continue
+                if kind == "file":
+                    name = data.get("name") or data.get("file_name")
+                    label = f"[文件：{name}]" if name else "[文件]"
+                elif kind == "at":
+                    label = "@" + str(data.get("name") or data.get("qq") or "成员")
+                else:
+                    label = labels.get(kind, "[消息]")
+                preview.append(QQIncomingSegment(type="text", data={"text": label}))
             reply_segments, _ = await self._convert_incoming_segments(
-                message_payload, "", group_id, resolve_reply_details=False
+                preview, "", "", resolve_reply_details=False
             )
         except ValueError:
             return None
