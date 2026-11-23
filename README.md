@@ -1,5 +1,13 @@
 # MaiBot OneBot 适配器（SnowLuma / NapCat）
 
+## 本地修改说明（2026-11-24）
+
+旧流程为了生成预览会读取引用附件；一次语音响应超出了 WebSocket 帧上限，连带用户新发的文字也没有进入麦麦。现在用消息元数据生成“[语音]”“[图片]”或文件名预览，并把引用目标 ID 传给麦麦。原消息详情不可用时仍保留 ID。
+
+修改在 `codecs/inbound/message_codec.py`，回归用例在 `tests/test_quote_preview.py`，覆盖附件预览和查不到引用详情两种情况。
+
+对应功能提交 `76c4659`。[本地修改分支 local-maibot](https://github.com/BRXYM/MaiBot-SnowLuma-Adapter/tree/local-maibot)
+
 需要 MaiBot >= 1.4.4，并包含插件配置「先迁移、后重建」的主程序修复。未包含该修复的 1.4.4 仍会在升级旧配置时丢字段，不能仅凭版本号判断。
 
 连接 SnowLuma / NapCat 及其他 OneBot v11 实现的 MaiBot 适配器插件。
